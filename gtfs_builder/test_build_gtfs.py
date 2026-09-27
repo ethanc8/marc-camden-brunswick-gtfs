@@ -8,7 +8,7 @@ Run with `pixi run -- pytest gtfs_builder`.
 
 import pytest
 
-from build_gtfs import build_stop_events, parse_cell, r_flagged, resolve_periods
+from build_gtfs import apply_brunswick_r_extra_stops, build_stop_events, parse_cell, r_flagged, resolve_periods
 
 
 @pytest.mark.parametrize(
@@ -87,6 +87,44 @@ def test_build_stop_events_applies_prefix_semantics_and_orders_chronologically()
 def test_build_stop_events_skips_non_stops():
     events = build_stop_events("999999", [("frederick", "—"), ("monocacy", "BUS")], {})
     assert events == []
+
+
+def test_apply_brunswick_r_extra_stops_inserts_at_the_right_time_and_timepoint():
+    # Train 872 has three configured insertions: Dickerson (after Point of
+    # Rocks), Boyds (after Barnesville), and Garrett Park (after Rockville).
+    events = [
+        ("point_of_rocks", "05:51:00", 0, 0, 1),
+        ("barnesville", "06:01:00", 0, 0, 1),
+        ("germantown", "06:09:00", 0, 0, 1),
+        ("rockville", "06:26:00", 0, 0, 1),
+        ("kensington", "06:32:00", 0, 0, 1),
+    ]
+    result = apply_brunswick_r_extra_stops("872", events)
+    assert result == [
+        ("point_of_rocks", "05:51:00", 0, 0, 1),
+        ("dickerson", "05:56:00", 0, 0, 0),
+        ("barnesville", "06:01:00", 0, 0, 1),
+        ("boyds", "06:05:00", 0, 0, 0),
+        ("germantown", "06:09:00", 0, 0, 1),
+        ("rockville", "06:26:00", 0, 0, 1),
+        ("garrett_park", "06:30:00", 0, 0, 0),
+        ("kensington", "06:32:00", 0, 0, 1),
+    ]
+
+
+def test_apply_brunswick_r_extra_stops_chains_off_a_just_inserted_anchor():
+    # Train 892's second insertion (Boyds) anchors off Barnesville, which is
+    # itself the first insertion -- not one of the original stops.
+    events = [("dickerson", "06:55:00", 0, 0, 1), ("germantown", "07:09:00", 0, 0, 1)]
+    result = apply_brunswick_r_extra_stops("892", events)
+    assert [stop_id for stop_id, *_ in result] == ["dickerson", "barnesville", "boyds", "germantown"]
+    assert [time for _, time, *_ in result] == ["06:55:00", "07:00:00", "07:04:00", "07:09:00"]
+
+
+def test_apply_brunswick_r_extra_stops_is_a_noop_for_trains_with_none_configured():
+    events = [("brunswick", "07:45:00", 0, 0, 1), ("point_of_rocks", "07:55:00", 0, 0, 1)]
+    assert apply_brunswick_r_extra_stops("880", events) == events
+    assert apply_brunswick_r_extra_stops("not-a-real-train", events) == events
 
 
 def test_build_stop_events_detects_backwards_time_as_a_bug():

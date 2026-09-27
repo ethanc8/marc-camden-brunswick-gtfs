@@ -136,10 +136,42 @@ def build_stop_events(train_number: str, ordered_stops: list[tuple[str, str]], o
     return events
 
 
+def _time_to_minutes(time_str: str) -> int:
+    hour, minute, _second = map(int, time_str.split(":"))
+    return hour * 60 + minute
+
+
+def _minutes_to_time(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}:00"
+
+
+def apply_brunswick_r_extra_stops(train_number: str, events: list):
+    """Insert this train's R-schedule extra stops (config.BRUNSWICK_R_EXTRA_STOPS),
+    each `minutes_after_anchor` minutes after its anchor stop -- which may
+    itself be a stop just inserted earlier in the same list, so anchors are
+    resolved against a running list that grows as we go. Extra stops get
+    pickup/drop_off_type=0 (regular) but timepoint=0 (estimated, not the
+    schedule's real timepoint) -- see config.py for where the minute deltas
+    come from."""
+    extra_stops = config.BRUNSWICK_R_EXTRA_STOPS.get(train_number, [])
+    if not extra_stops:
+        return events
+
+    working = [list(event) for event in events]  # [stop_id, time_str, pickup, dropoff, timepoint]
+    for anchor_stop_id, new_stop_id, minutes_after_anchor in extra_stops:
+        anchor_index = next(i for i, e in enumerate(working) if e[0] == anchor_stop_id)
+        new_time = _minutes_to_time(_time_to_minutes(working[anchor_index][1]) + minutes_after_anchor)
+        working.insert(anchor_index + 1, [new_stop_id, new_time, 0, 0, 0])
+
+    minutes = [_time_to_minutes(e[1]) for e in working]
+    if minutes != sorted(minutes):
+        raise ValueError(f"train {train_number}: R-schedule extra stops produced an out-of-order trip")
+    return [tuple(e) for e in working]
+
+
 def make_trips(train_number, route_id, direction_id, events, friday_only, r_capable, stop_names):
-    """A trip, plus its r_schedule mirror if this train keeps running under
-    the contingency schedule (see PLAN.md §3 -- same stop pattern, since the
-    real extra stops MARC would add aren't published)."""
+    """A trip, plus its R-schedule mirror if this train keeps running under
+    the contingency schedule -- see PLAN.md §3 and config.BRUNSWICK_R_EXTRA_STOPS."""
     if not events:
         return []
     base = {
@@ -155,7 +187,14 @@ def make_trips(train_number, route_id, direction_id, events, friday_only, r_capa
     }
     trips = [base]
     if r_capable:
-        mirror = dict(base, trip_id=f"Train{train_number}R", service_id="r_schedule")
+        r_events = apply_brunswick_r_extra_stops(train_number, events) if route_id == "brunswick" else events
+        mirror = dict(
+            base,
+            trip_id=f"Train{train_number}R",
+            service_id=config.R_SERVICE_BY_ROUTE[route_id],
+            trip_headsign=stop_names[r_events[-1][0]],
+            events=r_events,
+        )
         trips.append(mirror)
     return trips
 

@@ -40,7 +40,7 @@ were added in this service change, so no geocoding is needed.
 | `L` prefix (e.g. `L5:38`) | train may depart up to 5 min early | regular pickup/drop-off, `timepoint=0` |
 | `—` (em dash) | train never stops here | no `stop_times` row for this trip |
 | `R` (as a cell value, not a time) | stop is made *only* if the R (severe-weather/holiday) contingency schedule is in effect | no `stop_times` row on the regular trip; see §4 |
-| `R`/`Q`/`Q/R` under train number | `Q` = train has a quiet car (cosmetic, ignored); `R` = this train is one of the trains that keeps running under the R contingency schedule | drives which trips get an `r_schedule` mirror, see §4 |
+| `R`/`Q`/`Q/R` under train number | `Q` = train has a quiet car (cosmetic, ignored); `R` = this train is one of the trains that keeps running under the R contingency schedule | drives which trips get an `r_schedule_<line>` mirror, see §4 |
 | `M` / wheelchair icon next to station name | Metrorail transfer / station accessibility | wheelchair icon → `wheelchair_boarding` in stops; `M` is informational only, not modeled |
 
 ## 3. Decisions made (with you)
@@ -65,26 +65,43 @@ were added in this service change, so no geocoding is needed.
 - **shapes.txt**: skipped for now. May integrate `pfaedle-rs` later to derive shapes from real
   track geometry — **not now** (see §6).
 
-- **R (contingency) schedule**: `calendar.txt` gets a second service_id, `r_schedule`, with all
-  seven days set to `0` (so it never runs on its own) but a valid date range — inert until the
-  user adds `calendar_dates.txt` exceptions. Every train flagged `R` under its train number gets
-  a **mirrored trip** under `r_schedule`, id suffixed `R` (matching the old feed's own
-  `TrainNNNR` convention), reusing the train's normal stop pattern. This is a known
-  simplification: the brochures say the *actual* extra stops made under the R schedule are
-  announced day-of and aren't published. Revisit using the old feed's `*R` trips as a reference
-  for what real extra stops look like — **not now**.
+- **R (contingency) schedule**: `calendar.txt` gets one inert (all-zero-day) service_id
+  **per line**, `r_schedule_camden` and `r_schedule_brunswick`, not one shared service — the old
+  feed's `calendar_dates.txt` history shows MTA sometimes activates R for only one line at a time
+  (e.g. 2025-02-06 added only Brunswick's R service), which a single shared service_id can't
+  represent. Every train flagged `R` under its train number gets a **mirrored trip**, id suffixed
+  `R` (matching the old feed's own `TrainNNNR` convention).
+
+  What that mirror contains differs by line, based on what the old feed's `TrainNNN` vs
+  `TrainNNNR` stop_times actually show:
+  - **Camden**: every old `TrainNNNR` is byte-identical to its base trip, matching Camden's own
+    legend ("additional stops... will be announced prior to operation" — genuinely unpublished).
+    So Camden R-mirrors stay a pure copy of the base trip.
+  - **Brunswick**: most old `TrainNNNR` trips add real, published extra stops, matching
+    Brunswick's own legend ("Trains will make all stops on the R schedule" — a fixed, knowable
+    rule, not something announced day-of). So Brunswick R-mirrors add those same stops, at the
+    same minutes-after-the-previous-stop offset the old feed used, marked `timepoint=0` since
+    they're carried over from a different (pre-2026-09-28) schedule rather than read off this
+    one. See `config.BRUNSWICK_R_EXTRA_STOPS` for the full derivation, including the handful of
+    cases with no direct old-feed precedent (train 873 wasn't R-flagged before; train 892 gained
+    a new regular stop that made one of its old R-additions moot and exposed a new gap) —
+    those borrow the delta another same-direction train uses for the same station pair, noted
+    inline. Frederick and Monocacy are never added even where skipped: they're on a branch off
+    the Brunswick mainline, so a train serving the mainline can't also detour onto that branch.
 
 ## 4. Calendar design
 
 ```
 calendar.txt
-  weekday:    Mon-Fri=1, Sat/Sun=0, 2026-09-28..2026-11-01
-  r_schedule: all days=0,            2026-09-28..2026-11-01   (inert by default)
+  weekday:              Mon-Fri=1, Sat/Sun=0, 2026-09-28..2026-11-01
+  friday:               Fri=1, else 0,        2026-09-28..2026-11-01   (train 871 only)
+  r_schedule_camden:    all days=0,           2026-09-28..2026-11-01   (inert by default)
+  r_schedule_brunswick: all days=0,           2026-09-28..2026-11-01   (inert by default)
 
 calendar_dates.txt
   header only, no rows initially.
-  (documented example in README: add exception_type=1 for r_schedule + exception_type=2
-   for weekday on a given date to simulate an R-schedule day)
+  (to simulate an R day: add exception_type=2 for weekday and exception_type=1 for
+   r_schedule_camden and/or r_schedule_brunswick, matching whichever line(s) MTA declared)
 ```
 
 Columbus Day (2026-10-12, a Monday) falls inside our 9/28–11/1 window, and the brochures' fine
@@ -161,25 +178,25 @@ README.md                      # short usage doc
 
 ## 8. TODO
 
-- [ ] Build `reference/stops.csv` from the old feed (trim to Camden/Brunswick/WUS stations, rename
+- [x] Build `reference/stops.csv` from the old feed (trim to Camden/Brunswick/WUS stations, rename
       per current signage, keep `wheelchair_boarding`).
-- [ ] Build `reference/agency.csv`.
-- [ ] Write `pdf_extract.py` (pdfplumber word-position clustering) and produce draft CSVs for all
+- [x] Build `reference/agency.csv`.
+- [x] Write `pdf_extract.py` (pdfplumber word-position clustering) and produce draft CSVs for all
       4 timetable tables + the through-service table, from the "Changes" PDF page 2 of each line.
-- [ ] Manually verify every drafted cell against the rendered PNG images.
-- [ ] Re-extract the same tables from the brochure PDFs and diff; report discrepancies.
-- [ ] Encode the symbol → pickup/drop-off/timepoint mapping from §2 in `config.py`.
-- [ ] Write `build_gtfs.py` (agency/routes/calendar/calendar_dates/stops/trips/stop_times/feed_info).
-- [ ] Write the Rust `validator` crate using `gtfs-structures`.
-- [ ] Write `Makefile`, `pixi.toml`, `Cargo.toml`.
-- [ ] Run `make all`, review output, fix issues.
-- [ ] Write short `README.md`.
+- [x] Manually verify every drafted cell against the rendered PNG images.
+- [x] Re-extract the same tables from the brochure PDFs and diff; report discrepancies (none found).
+- [x] Encode the symbol → pickup/drop-off/timepoint mapping from §2 in `config.py`.
+- [x] Write `build_gtfs.py` (agency/routes/calendar/calendar_dates/stops/trips/stop_times/feed_info).
+- [x] Write the Rust `validator` crate using `gtfs-structures`.
+- [x] Write `Makefile`, `pixi.toml`, `Cargo.toml`.
+- [x] Run `make all`, review output, fix issues.
+- [x] Write short `README.md`.
+- [x] Give the R schedule its own calendar per line, and have Brunswick's R-mirrors add their
+      real extra stops (derived from the old feed), instead of a blind mirror — see §3.
 
 ## 9. Future / not now
 
 - Integrate `pfaedle-rs` to generate real-track-aligned `shapes.txt`.
-- Look at the old feed's actual `TrainNNNR` stop patterns to model real R-schedule additional
-  stops instead of mirroring the regular pattern.
 - MARC Penn Line (out of scope — this repo is Camden + Brunswick only).
 - Saturday/Sunday and other non-weekday calendars (out of scope per requirements).
 - Fare data (`fares.txt`/`fare_products.txt`).

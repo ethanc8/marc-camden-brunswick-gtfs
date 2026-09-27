@@ -31,10 +31,16 @@ ROUTES = {
     },
 }
 
-# service_id -> calendar.txt fields (days + date range). "r_schedule" is
-# intentionally all-zero: MARC's contingency ("R") schedule for severe
-# weather/holidays is never in effect by default, but exists here so a real
-# activation only requires calendar_dates.txt exceptions (see PLAN.md §4).
+# service_id -> calendar.txt fields (days + date range). The "r_schedule_*"
+# entries are intentionally all-zero: MARC's contingency ("R") schedule for
+# severe weather/holidays is never in effect by default, but exists here so a
+# real activation only requires calendar_dates.txt exceptions (see PLAN.md
+# §4). There's one per line (not one shared service) because the old MARC
+# feed's own history shows MTA sometimes activates R for only one line at a
+# time (e.g. 2025-02-06 added only the Brunswick R service) -- a single
+# shared service_id couldn't represent that. There's no r_schedule for
+# brunswick_camden: neither 830 nor 831 is R-flagged in the source PDFs.
+#
 # "friday" is for train 871, which the Brunswick brochure's fine print marks
 # "*Train 871 operates Friday only" -- it's real scheduled weekday service,
 # just not a Monday-Friday one, so it can't share the "weekday" service_id.
@@ -49,11 +55,23 @@ CALENDARS = {
         "saturday": 0, "sunday": 0,
         "start_date": SERVICE_START, "end_date": SERVICE_END,
     },
-    "r_schedule": {
+    "r_schedule_camden": {
         "monday": 0, "tuesday": 0, "wednesday": 0, "thursday": 0, "friday": 0,
         "saturday": 0, "sunday": 0,
         "start_date": SERVICE_START, "end_date": SERVICE_END,
     },
+    "r_schedule_brunswick": {
+        "monday": 0, "tuesday": 0, "wednesday": 0, "thursday": 0, "friday": 0,
+        "saturday": 0, "sunday": 0,
+        "start_date": SERVICE_START, "end_date": SERVICE_END,
+    },
+}
+
+# route_id -> its R-schedule calendar service_id. Looked up when mirroring an
+# R-flagged trip -- see PLAN.md §3/§4.
+R_SERVICE_BY_ROUTE = {
+    "camden": "r_schedule_camden",
+    "brunswick": "r_schedule_brunswick",
 }
 
 # Station name exactly as printed in extracted/*.csv -> reference/stops.csv
@@ -92,4 +110,56 @@ STATION_NAME_TO_STOP_ID = {
     "GARRETT PARK": "garrett_park",
     "KENSINGTON": "kensington",
     "SILVER SPRING": "silver_spring",
+}
+
+# Brunswick Line R-schedule extra stops: (anchor_stop_id, inserted_stop_id,
+# minutes_after_anchor). Camden's R-trips are pure mirrors of their regular
+# trip (no extra stops) -- the old feed shows Camden's R-trips are always
+# identical to their base trip, matching Camden's own legend text ("Additional
+# stops... will be announced prior to operation", i.e. genuinely unpublished).
+# Brunswick's legend instead flatly states "Trains will make all stops on the
+# R schedule", and the old feed confirms it: most Brunswick R-trips there add
+# real, published extra stops. This table is those same extra-stop insertions
+# (station + minutes after the previous stop), carried over to this schedule.
+#
+# Two things had to be re-derived rather than copied verbatim, because this is
+# a different schedule than the one the old feed described:
+#   - A station the old feed added under R can turn out to already be a
+#     *regular* stop in this schedule (e.g. train 892 gained Washington Grove
+#     as a real stop on 2026-09-28) -- those are simply left out below.
+#   - Conversely, a station this schedule newly skips that the old feed's
+#     R-trip never had to add (train 892's Boyds) needs an estimate with no
+#     direct precedent -- see the per-train notes.
+# Frederick and Monocacy are excluded everywhere even though some trains skip
+# them: they're on a branch off the Brunswick mainline, so a train serving the
+# Brunswick mainline can't also detour onto that branch under any schedule.
+#
+# Every inserted stop gets pickup_type/drop_off_type=0 (regular) but
+# timepoint=0 (not a timepoint) in build_gtfs.py: unlike the real, printed
+# times this schedule is built from, these are estimates.
+BRUNSWICK_R_EXTRA_STOPS = {
+    # Trains below with no historical R-trip in the old feed have no
+    # historical delta to draw on for a given insertion; those specific
+    # entries borrow the delta another same-direction train uses for the same
+    # station pair, noted inline.
+    "872": [("point_of_rocks", "dickerson", 5), ("barnesville", "boyds", 4), ("rockville", "garrett_park", 4)],
+    "878": [("gaithersburg", "washington_grove", 2), ("rockville", "garrett_park", 3)],
+    "880": [],  # already makes every stop on its regular pattern, same as in the old feed
+    "892": [
+        ("dickerson", "barnesville", 5),
+        ("barnesville", "boyds", 4),  # no old Train892R precedent; borrowed from Train872R's Barnesville->Boyds
+    ],
+    "875": [("kensington", "garrett_park", 4), ("rockville", "washington_grove", 4), ("germantown", "boyds", 4), ("barnesville", "dickerson", 3)],
+    "881": [("rockville", "washington_grove", 4), ("germantown", "boyds", 2), ("barnesville", "dickerson", 3)],
+    "893": [],  # every station the old feed's Train893R used to add (Garrett Park, Washington Grove, Boyds, Dickerson) is now a regular stop
+    "873": [
+        # Train 873 wasn't R-flagged before 2026-09-28, so there's no old
+        # Train873R at all. These four deltas are the average, at the same
+        # station pairs, of the three other westbound trains above
+        # (875/881/893) that do have old-feed precedent.
+        ("kensington", "garrett_park", 4),
+        ("rockville", "washington_grove", 4),
+        ("germantown", "boyds", 3),
+        ("barnesville", "dickerson", 3),
+    ],
 }
