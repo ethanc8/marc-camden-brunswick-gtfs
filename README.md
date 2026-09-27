@@ -5,7 +5,12 @@ covering the service change effective 2026-09-28 (the new Brunswick↔Camden
 through-running trains 830/831), built from the PDFs in `source-pdf/`.
 
 See [`PLAN.md`](PLAN.md) for the full design, the reasoning behind every
-non-obvious decision, and the running TODO / future-work list.
+non-obvious decision, and the running TODO / future-work list. See
+[`UPDATING.md`](UPDATING.md) when MARC publishes a new schedule PDF and this
+feed needs to be brought up to date. See
+[`PDF-TO-GTFS-LESSONS.md`](PDF-TO-GTFS-LESSONS.md) if you're starting a
+*different* PDF-to-GTFS project and want to know what from this one is worth
+reusing.
 
 ## Building
 
@@ -44,6 +49,5 @@ Other targets:
 ## Known limitations
 
 See PLAN.md §9 ("Future / not now") for the full list -- notably: no
-`shapes.txt` yet, the contingency "R" schedule's real (unpublished) extra
-stops aren't modeled, and Columbus Day (2026-10-12) is treated as a regular
+`shapes.txt` yet, and Columbus Day (2026-10-12) is treated as a regular
 weekday pending MARC publishing its promised modified schedule.
