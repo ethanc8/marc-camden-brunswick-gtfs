@@ -1,0 +1,18 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# cargo (project-local CARGO_HOME so we don't need to write to ~/.cargo)
+.cargo-home/
+validator/target/
+
+# generated GTFS output
+build/
+
+# draft extraction output (reviewed copies live in extracted/*.csv, not *.draft.csv)
+extracted/*.draft.csv
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/

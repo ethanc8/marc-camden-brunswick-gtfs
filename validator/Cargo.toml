@@ -1,0 +1,7 @@
+[package]
+name = "gtfs_validator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gtfs-structures = { version = "0.50.1", default-features = false }

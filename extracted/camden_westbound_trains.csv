@@ -1,0 +1,12 @@
+train_number,flags,friday_only
+841,Q,False
+843,Q,False
+845,Q/R,False
+847,Q,False
+849,Q/R,False
+851,Q/R,False
+853,,False
+855,,False
+831,,False
+857,R,False
+859,,False
